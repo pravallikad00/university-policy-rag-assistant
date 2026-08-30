@@ -4,11 +4,13 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pypdf import PdfReader
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 app = FastAPI(
     title="University Policy RAG Assistant",
-    description="An API that answers university policy and course questions using source documents.",
-    version="0.3.0",
+    description="An API that answers university policy and course questions using local document retrieval.",
+    version="0.4.0",
 )
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -52,24 +54,30 @@ def get_document_chunks() -> list[dict]:
 
 
 def find_relevant_section(question: str) -> dict:
-    question_words = {
-        word.lower().strip(".,?!")
-        for word in question.split()
-        if len(word) > 2
-    }
+    document_chunks = get_document_chunks()
 
-    best_chunk = None
-    best_score = 0
+    if not document_chunks:
+        return {
+            "answer": "No documents are available for searching.",
+            "sources": []
+        }
 
-    for chunk in get_document_chunks():
-        chunk_words = set(chunk["content"].lower().split())
-        score = len(question_words.intersection(chunk_words))
+    chunk_texts = [chunk["content"] for chunk in document_chunks]
 
-        if score > best_score:
-            best_score = score
-            best_chunk = chunk
+    vectorizer = TfidfVectorizer(stop_words="english")
+    document_vectors = vectorizer.fit_transform(chunk_texts)
+    question_vector = vectorizer.transform([question])
 
-    if best_chunk is None:
+    similarity_scores = cosine_similarity(
+        question_vector,
+        document_vectors
+    ).flatten()
+
+    best_index = similarity_scores.argmax()
+    best_score = float(similarity_scores[best_index])
+    best_chunk = document_chunks[best_index]
+
+    if best_score == 0:
         return {
             "answer": "I could not find a matching answer in the available documents.",
             "sources": []
@@ -80,7 +88,7 @@ def find_relevant_section(question: str) -> dict:
         "sources": [
             {
                 "document": best_chunk["document"],
-                "relevance_score": best_score
+                "relevance_score": round(best_score, 3)
             }
         ]
     }
