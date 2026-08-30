@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>University Policy RAG Assistant</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f4f7fb;
+            color: #1f2937;
+        }
+
+        main {
+            max-width: 850px;
+            margin: 0 auto;
+            padding: 48px 20px;
+        }
+
+        h1 {
+            margin-bottom: 8px;
+            color: #123b69;
+        }
+
+        .subtitle {
+            margin-top: 0;
+            color: #52616b;
+        }
+
+        .card {
+            margin-top: 24px;
+            padding: 24px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        input,
+        textarea,
+        button {
+            width: 100%;
+            font-size: 16px;
+        }
+
+        input,
+        textarea {
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+        }
+
+        textarea {
+            min-height: 110px;
+            resize: vertical;
+        }
+
+        button {
+            margin-top: 14px;
+            padding: 12px 16px;
+            border: 0;
+            border-radius: 8px;
+            background: #1363a5;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #0d4d81;
+        }
+
+        .message {
+            margin-top: 16px;
+            padding: 12px;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .success {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .answer-box {
+            margin-top: 16px;
+            padding: 16px;
+            border-left: 4px solid #1363a5;
+            background: #eff6ff;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            display: none;
+        }
+
+        .source {
+            margin-top: 12px;
+            font-size: 14px;
+            color: #475569;
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <h1>University Policy RAG Assistant</h1>
+        <p class="subtitle">
+            Upload an approved policy PDF and ask questions using document-based retrieval.
+        </p>
+
+        <section class="card">
+            <h2>1. Upload a Policy PDF</h2>
+
+            <form id="upload-form">
+                <label for="pdf-file">Select a public policy or course-information PDF</label>
+                <input id="pdf-file" type="file" accept=".pdf" required />
+                <button type="submit">Upload and Process PDF</button>
+            </form>
+
+            <div id="upload-message" class="message"></div>
+        </section>
+
+        <section class="card">
+            <h2>2. Ask a Question</h2>
+
+            <form id="question-form">
+                <label for="question">Question</label>
+                <textarea id="question" placeholder="Example: What are the graduation requirements?"
+                    required></textarea>
+                <button type="submit">Ask Question</button>
+            </form>
+
+            <div id="answer-box" class="answer-box">
+                <strong>Answer</strong>
+                <p id="answer-text"></p>
+                <p id="source-text" class="source"></p>
+            </div>
+
+            <div id="question-message" class="message"></div>
+        </section>
+    </main>
+
+    <script>
+        const uploadForm = document.getElementById("upload-form");
+        const uploadMessage = document.getElementById("upload-message");
+
+        const questionForm = document.getElementById("question-form");
+        const questionMessage = document.getElementById("question-message");
+        const answerBox = document.getElementById("answer-box");
+        const answerText = document.getElementById("answer-text");
+        const sourceText = document.getElementById("source-text");
+
+        function showMessage(element, message, type) {
+            element.textContent = message;
+            element.className = `message ${type}`;
+            element.style.display = "block";
+        }
+
+        uploadForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const fileInput = document.getElementById("pdf-file");
+            const formData = new FormData();
+            formData.append("file", fileInput.files[0]);
+
+            try {
+                const response = await fetch("/upload-pdf", {
+                    method: "POST",
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.detail || "Upload failed.");
+                }
+
+                showMessage(
+                    uploadMessage,
+                    `${result.pdf_file} uploaded successfully. ${result.characters_extracted} characters extracted.`,
+                    "success"
+                );
+            } catch (error) {
+                showMessage(uploadMessage, error.message, "error");
+            }
+        });
+
+        questionForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const question = document.getElementById("question").value;
+
+            try {
+                const response = await fetch("/ask", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ question })
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.detail || "Question request failed.");
+                }
+
+                answerText.textContent = result.answer;
+
+                if (result.sources.length > 0) {
+                    const source = result.sources[0];
+                    sourceText.textContent =
+                        `Source: ${source.document} | Relevance score: ${source.relevance_score}`;
+                } else {
+                    sourceText.textContent = "No matching source was found.";
+                }
+
+                answerBox.style.display = "block";
+                questionMessage.style.display = "none";
+            } catch (error) {
+                showMessage(questionMessage, error.message, "error");
+            }
+        });
+    </script>
+</body>
+
+</html>

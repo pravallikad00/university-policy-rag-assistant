@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pypdf import PdfReader
 
@@ -140,3 +141,6 @@ def ask_question(request: QuestionRequest):
         "answer": result["answer"],
         "sources": result["sources"]
     }
+
+
+app.mount("/app", StaticFiles(directory="static", html=True), name="web_app")
